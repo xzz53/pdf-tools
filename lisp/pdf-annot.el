@@ -1259,17 +1259,16 @@ The collection is given to completing-read in the
 
 (defun pdf-annot-keyboard-annotate (&optional arg)
   "Create markup annotation using the keyboard.
-
-Prompts for start pattern, can be only beginning part of a word
-or can be multiple words, and end pattern, can be only ending
-part of a word or multiple words, for the text region to
-annotate. Creates type of `pdf-annot-keyboard-annot-default-type'
-by default. When prefixed with universal argument
-\[universal-argument], the command additionally prompts for
-selecting an annotation type.
+Prompts for start pattern and end pattern for the text region to
+annotate (pattern can be only beginning/ending part of a word or
+multiple words). If any pattern returns multiple matches then
+additionally prompt for selecting the correct region(s). Creates
+type of `pdf-annot-keyboard-annot-default-type' by default. When
+prefixed with universal argument \\[universal-argument], the
+command additionally prompts for selecting an annotation type.
 
 Unfortunately, in some documents the edges (i.e. size of the
-region) are not translated correctly"
+region) are not translated correctly."
   (interactive "P")
   (pdf-tools-assert-pdf-buffer)
   (let* ((from (pdf-annot-keyboard-annot-format-collection
@@ -1285,12 +1284,22 @@ region) are not translated correctly"
                          (cadar (alist-get
                                  (completing-read "Select correct START context: " from)
                                  from nil nil 'equal))))
+         ;; list only to's that come after the selected start region
+         (tos-after-start (delete nil
+                                  (mapcar (lambda (x)
+                                            (let ((coords (car (cdadr x))))
+                                              (if (> (nth 1 coords) (nth 3 start-coords))
+                                                  x
+                                                (when (and (= (nth 1 coords) (nth 1 start-coords))
+                                                           (> (nth 0 coords) (nth 2 start-coords)))
+                                                  x))))
+                                          to)))
          (end-coords (when to
                        (if (= (length to) 1)
-                          (cadr (cadar to))
-                        (cadar (alist-get
-                                (completing-read "Select correct END context: " to)
-                                to nil nil 'equal)))))
+                           (cadr (cadar to))
+                         (cadar (alist-get
+                                 (completing-read "Select correct END context: " tos-after-start)
+                                 tos-after-start nil nil 'equal)))))
          (edges (if to
                     (append (cl-subseq start-coords 0 2) (cl-subseq end-coords 2 4))
                   start-coords)))
