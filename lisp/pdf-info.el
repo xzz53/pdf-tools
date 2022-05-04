@@ -1071,7 +1071,7 @@ A No-op, if BUFFER has not running server instance."
     (cond
      ((not (memq 'writable-annotations features)) nil)
      ((memq 'markup-annotations features)
-      (list 'text 'squiggly 'underline 'strike-out 'highlight))
+      (list 'text 'squiggly 'underline 'strike-out 'highlight 'line))
      (t (list 'text)))))
 
 (defun pdf-info-open (&optional file-or-buffer password)
