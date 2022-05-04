@@ -61,6 +61,33 @@
   "Extract infos from pdf-files via a helper process."
   :group 'pdf-tools)
 
+(defcustom pdf-info-default-backend 'epdfinfo
+  "The default backend for pdf-tools.
+When this value is `epdfinfo' then use the original epdfinfo
+server which uses the poppler library rendering/editing the
+pdf's. When this value is `vimura' then use the newer, less
+tested, vimura server that uses the mupdf library for
+rendering/editing pdf's.
+
+The two servers provide different features, see the pdf-tools
+README for more information.")
+
+(defcustom pdf-tools-server 'epdfinfo
+  "Backend for accessing pdf files.
+
+The ‘epdfinfo' server is the original and fastest server, written
+in C, implementing, a reasonable set but limited set of options
+provides by the freedesktop.org its Poppler PDF library.
+
+The ‘vimura' server is newer and because it is written in python
+and using the excellent, fast and very elaborate pymupdf library,
+it is much more hackable than the ‘epdfinfo' server. Ultimately,
+this backend should provide many additional features that are not
+provided by the ‘epdfinfo' server. "
+  :group 'pdf-tools
+  :type 'symbol
+  :options '(epdfinfo vimura))
+
 (defcustom pdf-info-epdfinfo-program
   (let ((executable (if (eq system-type 'windows-nt)
                         "epdfinfo.exe" "epdfinfo"))
@@ -136,6 +163,8 @@ in a `with-temp-buffer' form."
 ;; * Variables
 ;; * ================================================================== *
 
+(defvar pdf-info-current-backend pdf-info-default-backend)
+
 (defvar pdf-info-asynchronous nil
   "If non-nil process queries asynchronously.
 
@@ -192,6 +221,20 @@ This variable is initially t, telling the code starting the
 server, that it never ran.")
 
 
+;; * ================================================================== *
+;; * Backend
+;; * ================================================================== *
+
+(defun pdf-tools-toggle-server ()
+  (interactive)
+  (when (and pdf-info--queue (listp pdf-info--queue))
+    (tq-close pdf-info--queue))
+  (setq pdf-info-current-backend (print (if (eq pdf-info-current-backend 'epdfinfo)
+                                            'vimura
+                                          'epdfinfo)))
+  (when (eq pdf-info-current-backend 'vimura)
+    (require 'pdf-script)))
+
 ;; * ================================================================== *
 ;; * Process handling
 ;; * ================================================================== *
@@ -291,18 +334,34 @@ error."
       (when (eq pdf-info-restart-process-p 'ask)
         (setq pdf-info-restart-process-p nil))
       (error "The epdfinfo server quit"))
-    (pdf-info-check-epdfinfo)
-    (let* ((process-connection-type)    ;Avoid 4096 Byte bug #12440.
-           (default-directory "~")
-           (proc (apply #'start-process
-                        "epdfinfo" " *epdfinfo*" pdf-info-epdfinfo-program
-                        (when pdf-info-epdfinfo-error-filename
-                          (list pdf-info-epdfinfo-error-filename)))))
-      (with-current-buffer " *epdfinfo*"
-        (erase-buffer))
-      (set-process-query-on-exit-flag proc nil)
-      (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
-      (setq pdf-info--queue (tq-create proc))))
+    ;; (pdf-info-check-epdfinfo)
+    (let ((ps-value (getenv "PYTHONSTARTUP")) ; store current value
+          (vimura-dir (concat
+                       (file-name-as-directory
+                        (substring
+                         (shell-command-to-string "python -m site --user-site")
+                         0 -1))
+                       "vimura_server/")))
+      (setenv "PYTHONSTARTUP" (concat vimura-dir "pythonstartup.py"))
+      (let* (
+             ;; (process-connection-type)    ;Avoid 4096 Byte bug #12440.
+             (default-directory "~")
+             (cmd-and-args (pcase pdf-info-current-backend
+                             ('epdfinfo (nconc (list pdf-info-epdfinfo-program)
+                                               (when pdf-info-epdfinfo-error-filename
+                                                 (list pdf-info-epdfinfo-error-filename))))
+                             ('vimura '("python" "-q"))))
+             (proc (apply #'start-process
+                          "epdfinfo" " *epdfinfo*" cmd-and-args)))
+        (when (eq pdf-info-current-backend 'vimura)
+          (process-send-string proc
+                               "from vimura_server.vimura import *\n"))
+        (setenv "PYTHONSTARTUP" ps-value) ; set back value
+        (with-current-buffer " *epdfinfo*"
+          (erase-buffer))
+        (set-process-query-on-exit-flag proc nil)
+        (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+        (setq pdf-info--queue (tq-create proc)))))
   pdf-info--queue)
 
 (advice-add 'tq-process-buffer :around #'pdf-info--tq-workaround)
@@ -371,8 +430,11 @@ the transmission-queue and arguments to the callback."
                       (lambda (s r)
                         (setq status s response r done t)))))
     (pdf-info-query--log query t)
-    (tq-enqueue
-     pdf-info--queue query "^\\.\n" closure callback)
+    (tq-enqueue pdf-info--queue
+                (if (eq pdf-info-current-backend 'vimura)
+                    (concat "tq_query('" (substring query 0 -1) "')\n")
+                  query)
+                "^\\.\n" closure callback)
     (unless pdf-info-asynchronous
       (while (and (not done)
                   (eq (process-status (pdf-info-process))
@@ -1219,10 +1281,11 @@ URI.
 In the first two cases, PAGE may be 0 and TOP nil, which means
 these data is unspecified."
   (cl-check-type page natnum)
-  (pdf-info-query
-   'pagelinks
-   (pdf-info--normalize-file-or-buffer file-or-buffer)
-   page))
+  (when (string= (file-name-extension buffer-file-name) "pdf")
+    (pdf-info-query
+     'pagelinks
+     (pdf-info--normalize-file-or-buffer file-or-buffer)
+     page)))
 
 (defun pdf-info-number-of-pages (&optional file-or-buffer)
   "Return the number of pages in document FILE-OR-BUFFER."
