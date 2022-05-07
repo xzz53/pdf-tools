@@ -232,8 +232,11 @@ server, that it never ran.")
   (setq pdf-info-current-backend (print (if (eq pdf-info-current-backend 'epdfinfo)
                                             'vimura
                                           'epdfinfo)))
-  (when (eq pdf-info-current-backend 'vimura)
+  (if (eq pdf-info-current-backend 'epdfinfo)
+      (push '("\\.epub\\'" . doc-view-mode) auto-mode-alist)
+    (push '("\\.epub\\'" . pdf-view-mode) auto-mode-alist)
     (require 'pdf-script)))
+
 
 ;; * ================================================================== *
 ;; * Process handling

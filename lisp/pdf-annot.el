@@ -299,6 +299,7 @@ Setting this after the package was loaded has no effect."
   (let ((kmap (make-sparse-keymap))
         (smap (make-sparse-keymap)))
     (define-key kmap pdf-annot-minor-mode-map-prefix smap)
+    (define-key kmap (kbd "e") 'pdf-annot-edit)
     (define-key smap "l" #'pdf-annot-list-annotations)
     ;; (define-key smap "d" 'pdf-annot-toggle-display-annotations)
     (define-key smap "a" #'pdf-annot-attachment-dired)
@@ -1722,7 +1723,6 @@ Currently supported properties are page, type, label, date and contents."
 
 (defvar pdf-annot-list-mode-map
   (let ((km (make-sparse-keymap)))
-    (define-key km (kbd "e") 'pdf-annot-edit)
     (define-key km (kbd "C-c C-f") #'pdf-annot-list-follow-minor-mode)
     (define-key km (kbd "SPC") #'pdf-annot-list-display-annotation-from-id)
     km))
