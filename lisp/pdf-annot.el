@@ -1284,6 +1284,42 @@ The collection is given to completing-read in the
                     (cdr y))))
           search-results))
 
+(defun pdf-annot-read-candidates (candidates &optional position)
+  "Using PROMPT, interactively read an annot-action.
+
+See `pdf-annot-edit' for the interface."
+  (pdf-util-assert-pdf-window)
+  (let* ((keys (pdf-links-read-link-action--create-keys
+                (length candidates)))
+         (key-strings (mapcar (apply-partially 'apply 'string)
+                              keys))
+         (alist (cl-mapcar 'cons keys candidates))
+         (size (pdf-view-image-size))
+         (colors (pdf-util-face-colors
+                  'pdf-links-read-link pdf-view-dark-minor-mode))
+         (args (list
+                :foreground (car colors)
+                :background (cdr colors)
+                :formats
+                `((?c . ,(lambda (_edges) (pop key-strings)))
+                  (?P . ,(number-to-string
+                          (max 1 (* (cdr size)
+                                    pdf-links-convert-pointsize-scale)))))
+                :commands pdf-links-read-link-convert-commands
+                :apply (pdf-util-scale-relative-to-pixel
+                        (mapcar (lambda (l) (cadr (assq 'edges l)))
+                                candidates)))))
+    ;; (print (plist-get args :apply))
+    (unless candidates
+      (error "No candidates on this page"))
+    (unwind-protect
+        (let ((image-data (apply 'pdf-util-convert-page args)))
+          (pdf-view-display-image
+           (create-image image-data (pdf-view-image-type) t)
+           (when pdf-view-roll-minor-mode (pdf-view-current-page)))
+          (pdf-links-read-link-action--read-chars "Select candidates: " alist))
+      (pdf-view-redisplay))))
+
 (defun pdf-annot-keyboard-annotate (&optional arg)
   "Create markup annotation using the keyboard.
 Prompts for start pattern and end pattern for the text region to
@@ -1301,32 +1337,35 @@ region) are not translated correctly."
   (let* ((from (pdf-annot-keyboard-annot-format-collection
                 (pdf-info-search-string (read-string "From: ")
                                         (pdf-view-current-page))))
-         (to (let ((patt (read-string "To: ")))
-               (unless (string= patt "")
-                 (pdf-annot-keyboard-annot-format-collection
-                  (pdf-info-search-string patt
-                                          (pdf-view-current-page))))))
+         (to (print (let ((patt (read-string "To: ")))
+                (if (string= patt "")
+                    from
+                  (pdf-annot-keyboard-annot-format-collection
+                   (pdf-info-search-string patt
+                                           (pdf-view-current-page)))))))
          (start-coords (if (= (length from) 1)
                            (cadr (cadar from))
-                         (cadar (alist-get
-                                 (completing-read "Select correct START context: " from)
-                                 from nil nil 'equal))))
+                         (car (alist-get
+                               'edges
+                               (pdf-annot-read-candidates from)))))
          ;; list only to's that come after the selected start region
-         (tos-after-start (delete nil
-                                  (mapcar (lambda (x)
-                                            (let ((coords (car (cdadr x))))
-                                              (if (> (nth 1 coords) (nth 3 start-coords))
-                                                  x
-                                                (when (and (= (nth 1 coords) (nth 1 start-coords))
-                                                           (> (nth 0 coords) (nth 2 start-coords)))
-                                                  x))))
-                                          to)))
-         (end-coords (when to
-                       (if (= (length to) 1)
-                           (cadr (cadar to))
-                         (cadar (alist-get
-                                 (completing-read "Select correct END context: " tos-after-start)
-                                 tos-after-start nil nil 'equal)))))
+         (tos-after-start (unless (eq to from)
+                            (delete nil
+                                   (mapcar (lambda (x)
+                                             (let ((coords (car (cdadr x))))
+                                               (if (> (nth 1 coords) (nth 3 start-coords))
+                                                   x
+                                                 (when (and (= (nth 1 coords) (nth 1 start-coords))
+                                                            (> (nth 0 coords) (nth 2 start-coords)))
+                                                   x))))
+                                           to))))
+         (end-coords (if (eq to from)
+                         start-coords
+                       (if (= (length tos-after-start) 1)
+                           (cadr (cadar tos-after-start))
+                         (car (alist-get
+                               'edges
+                               (pdf-annot-read-candidates tos-after-start))))))
          (edges (if to
                     (append (cl-subseq start-coords 0 2) (cl-subseq end-coords 2 4))
                   start-coords)))
