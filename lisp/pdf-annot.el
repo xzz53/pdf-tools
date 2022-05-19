@@ -598,6 +598,18 @@ This function always returns nil."
     (message "Annotation deleted"))
   nil)
 
+(defun pdf-annot-keyboard-delete (a)
+"Delete annot via `pdf-annot-read-annot'.
+This function displays characters around the annots in the current
+page and starts reading characters (ignoring case).  After a
+sufficient number of characters have been read, the corresponding
+annot's annot is invoked.  Additionally, SPC may be used to
+scroll the current page."
+  (interactive
+   (list (or (pdf-annot-read-annot "Activate annot (SPC scrolls): ")
+             (error "No annot selected"))))
+  (pdf-annot-delete a))
+
 (defun pdf-annot-text-annotation-p (a)
   "Return non-nil if annotation A is of type text."
   (eq 'text (pdf-annot-get a 'type)))
