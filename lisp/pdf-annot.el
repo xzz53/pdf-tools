@@ -1728,7 +1728,9 @@ scroll the current page."
 
 See `pdf-annot-edit' for the interface."
   (pdf-util-assert-pdf-window)
-  (let* ((annots (pdf-annot-getannots (pdf-view-current-page) nil nil))
+  (let* ((annots (seq-remove (lambda (a)
+                               (eq (alist-get 'type a) 'link))
+                             (pdf-annot-getannots (pdf-view-current-page) nil nil)))
          (keys (pdf-links-read-link-action--create-keys
                 (length annots)))
          (key-strings (mapcar (apply-partially 'apply 'string)
@@ -1752,16 +1754,10 @@ See `pdf-annot-edit' for the interface."
     ;; (print (plist-get args :apply))
     (unless annots
       (error "No annots on this page"))
+    (unless annots
+      (error "No annots on this page"))
     (unwind-protect
-        (let ((image-data
-               (pdf-cache-get-image
-                (pdf-view-current-page)
-                (car size) (car size) 'pdf-annot-read-annot)))
-          (unless image-data
-            (setq image-data (apply 'pdf-util-convert-page args ))
-            (pdf-cache-put-image
-             (pdf-view-current-page)
-             (car size) image-data 'pdf-annot-read-annot))
+        (let ((image-data (apply 'pdf-util-convert-page args)))
           (pdf-view-display-image
            (create-image image-data (pdf-view-image-type) t)
            (when pdf-view-roll-minor-mode (pdf-view-current-page)))
