@@ -603,7 +603,8 @@ See `make-temp-file' for the arguments."
            (buffer-live-p buffer))
        (save-current-buffer
          (and buffer (set-buffer buffer))
-         (derived-mode-p 'pdf-view-mode))))
+         (or (derived-mode-p 'pdf-view-mode)
+             (derived-mode-p 'papyrus-epdf-mode)))))
 
 (defun pdf-util-assert-pdf-buffer (&optional buffer)
   (unless (pdf-util-pdf-buffer-p buffer)
