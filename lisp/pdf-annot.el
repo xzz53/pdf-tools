@@ -50,7 +50,7 @@ The functions on this hook will be called when some annotation is
 activated, usually by a mouse-click.  Each one is called with the
 annotation as a single argument and it should return a non-nil
 value if it has `handled' it.  If no such function exists, the
-default handler `pdf-annot-default-handler' will be
+default handler `pdf-annot-default-activate-handler' will be
 called.
 
 This hook is meant to allow for custom annotations.  FIXME:
@@ -293,7 +293,6 @@ Setting this after the package was loaded has no effect."
         (smap (make-sparse-keymap)))
     (define-key kmap pdf-annot-minor-mode-map-prefix smap)
     (define-key smap "l" #'pdf-annot-list-annotations)
-    ;; (define-key smap "d" 'pdf-annot-toggle-display-annotations)
     (define-key smap "a" #'pdf-annot-attachment-dired)
     (when (pdf-info-writable-annotations-p)
       (define-key smap "D" #'pdf-annot-delete)
@@ -525,12 +524,12 @@ the variable is nil and this function is called again."
            (union (cl-union (cl-union changed inserted :test 'pdf-annot-equal)
                             deleted :test 'pdf-annot-equal))
            (closure (lambda (arg)
-                      (cl-ecase arg
-                        (:inserted (copy-sequence inserted))
-                        (:changed (copy-sequence changed))
-                        (:deleted (copy-sequence deleted))
-                        (t (copy-sequence union))
-                        (nil nil))))
+                      (when arg
+                        (cl-case arg
+                          (:inserted (copy-sequence inserted))
+                          (:changed (copy-sequence changed))
+                          (:deleted (copy-sequence deleted))
+                          (t (copy-sequence union))))))
            (pages (mapcar (lambda (a) (pdf-annot-get a 'page)) union)))
       (when union
         (unwind-protect
@@ -1373,10 +1372,7 @@ by a header."
                  ;; latex-preview regardless of the user
                  ;; configuration.
                  (org-preview-latex-default-process 'dvipng)
-                 ;; For backward compatibility with emacs-version < 26.1
-                 (org-latex-create-formula-image-program 'dvipng)
-                 (org-format-latex-header
-                  pdf-annot-latex-header)
+                 (org-format-latex-header pdf-annot-latex-header)
                  (temporary-file-directory
                   (pdf-util-expand-file-name "pdf-annot-print-annotation-latex")))
             (unless (file-directory-p temporary-file-directory)
@@ -1466,8 +1462,8 @@ annotation's contents and otherwise `org-mode'."
   "Finalize edit-operations on an Annotation.
 
 If DO-SAVE is t, save the changes to annotation content without
-asking. If DO-SAVE is 'ask, check if the user if contents should
-be saved.
+asking. If DO-SAVE is `ask', check with the user if contents
+should be saved.
 
 If DO-KILL is t, kill all windows displaying the annotation
 contents. Else just bury the buffers."
@@ -1635,7 +1631,7 @@ Currently supported properties are page, type, label, date and contents."
              (date (integer :value 24 :tag "Column Width"))
              (contents (integer :value 56 :tag "Column Width"))))
 
-(defcustom pdf-annot-list-highlight-type nil
+(defcustom pdf-annot-list-highlight-type t
   "Whether to highlight \"Type\" column annotation list with annotation color."
   :type 'boolean)
 
@@ -1704,7 +1700,9 @@ pretty-printed output."
            (lambda (str)
              (replace-regexp-in-string "\n" " " str t t))))
       (cl-ecase entry-type
-        (date (pdf-annot-print-property a 'modified))
+        (date (propertize (pdf-annot-print-property a 'modified)
+                          'date
+                          (pdf-annot-get a 'modified)))
         (page (pdf-annot-print-property a 'page))
         (label (funcall prune-newlines
                         (pdf-annot-print-property a 'label)))
@@ -1731,19 +1729,38 @@ pretty-printed output."
                  pdf-annot-list-format))))
 
 (define-derived-mode pdf-annot-list-mode tablist-mode "Annots"
+  ;; @TODO: Remove the hard-coded index values here, and figure out a
+  ;; way to properly link this to the index values of
+  ;; `pdf-annot-list-format'.
+
+  ;; @TODO: Add tests for annotation formatting and display
   (let* ((page-sorter
           (lambda (a b)
             (< (string-to-number (aref (cadr a) 0))
                (string-to-number (aref (cadr b) 0)))))
+         (date-sorter
+          (lambda (a b)
+            (time-less-p (get-text-property 0 'date (aref (cadr a) 3))
+                         (get-text-property 0 'date (aref (cadr b) 3)))))
          (format-generator
           (lambda (format)
             (let ((field (car format))
                   (width (cdr format)))
               (cl-case field
-                (page `("Pg." 3 ,page-sorter :read-only t :right-alight t))
+                (page `("Pg."
+                        ,width
+                        ,page-sorter
+                        :read-only t
+                        :right-align t))
+                (date `("Date"
+                        ,width
+                        ,date-sorter
+                        :read-only t))
                 (t (list
                     (capitalize (symbol-name field))
-                    width t :read-only t)))))))
+                    width
+                    t
+                    :read-only t)))))))
     (setq tabulated-list-entries 'pdf-annot-list-entries
           tabulated-list-format (vconcat
                                  (mapcar

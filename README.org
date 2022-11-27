@@ -32,7 +32,7 @@ Actually, displaying PDF files is just one part of ~pdf-tools~. Since ~poppler~ 
 Installing this package via NonGNU ELPA or MELPA or any of the other package managers is straightforward and should just work.
 ~pdf-tools~ requires a server ~epdfinfo~ to run against, which it will try to compile and build when it is activated for the first time.
 
-You should not require any manual changes. The documentation below is *only if you are installing from source*, or for troubleshooting / debugging purposes.
+You should not require any manual changes. The documentation below is *only if you are installing from source*, or for troubleshooting / debugging purposes. The following steps need to be followed *in this order*, to install ~pdf-tools~ and ~epdfinfo~ correctly:
 
 - [[brain-child:8ce3cf4e-d186-4de1-a40e-f41063068ab0][Installing ~epdfinfo~ server prerequisites]]
 - [[brain-child:e305cd0a-e798-4c2b-af27-21bcd936c1c9][Installing the ~epdfinfo~ server]]
@@ -57,12 +57,12 @@ See the section on [[id:A34704B9-1B51-4614-8806-C4059F7B42D5][I want to add supp
 :CREATED:  [2022-02-13 Sun 23:17]
 :ID:       abaae1be-3bbb-4d99-90e7-5429c56083e1
 :END:
-First make sure a suitable build-system is installed. We need at least a C/C++ compiler (both ~gcc~ and ~g++~), ~make~, ~automake~ and ~autoconf~.
+First make sure a suitable build-system is installed. We need at least a C compiler (~gcc~), ~make~, ~automake~ and ~autoconf~.
 
 Next we need to install a few libraries ~pdf-tools~ depends on, some of which are probably already on your system.
 
 #+begin_src sh
-  $ sudo apt install libpng-dev zlib1g-dev libpoppler-glib-dev libpoppler-private-dev
+  $ sudo apt install libpng-dev zlib1g-dev libpoppler-glib-dev
 #+end_src
 
 On some older Ubuntu systems, the final command will possibly give an error. This should be no problem, since in some versions this package was contained in the main package ~libpoppler-dev~. Also note, that ~zlib1g-dev~ was for a long time called ~libz-dev~, which it still may be on your system.
@@ -132,7 +132,7 @@ If you choose not to install from MELPA, you must substitute ~gmake~ for ~make~ 
 :ID:       d0013822-f4d0-4354-b3db-c54ffe41ce58
 :END:
 #+BEGIN_SRC sh
-  $ sudo dnf install make automake autoconf gcc gcc-c++ libpng-devel zlib-devel poppler-glib-devel
+  $ sudo dnf install make automake autoconf gcc libpng-devel zlib-devel poppler-glib-devel
 #+END_SRC
 
 There is one feature (following links of a PDF document by plain keystrokes) which requires imagemagick's convert utility. This requirement is optional and you may install it like so:
@@ -146,12 +146,12 @@ There is one feature (following links of a PDF document by plain keystrokes) whi
 :END:
 For openSUSE Tumbleweed and Leap:
 #+BEGIN_SRC sh
-  $ sudo zypper install make automake autoconf gcc gcc-c++ libpng16-devel libpng16-compat-devel zlib-devel libpoppler-devel libpoppler-glib-devel glib2-devel
+  $ sudo zypper install make automake autoconf gcc libpng16-devel libpng16-compat-devel zlib-devel libpoppler-devel libpoppler-glib-devel glib2-devel
 #+END_SRC
 
 For openSUSE MicroOS Desktop:
 #+BEGIN_SRC sh
-  $ pkcon install make automake autoconf gcc gcc-c++ libpng16-devel libpng16-compat-devel zlib-devel libpoppler-devel libpoppler-glib-devel glib2-devel
+  $ pkcon install make automake autoconf gcc libpng16-devel libpng16-compat-devel zlib-devel libpoppler-devel libpoppler-glib-devel glib2-devel
 #+END_SRC
 
 There is one feature (following links of a PDF document by plain keystrokes) which requires imagemagick's convert utility. This requirement is optional and you may install the imagemagick package via the package manager of your choice.
@@ -161,7 +161,7 @@ There is one feature (following links of a PDF document by plain keystrokes) whi
 :ID:       443d9b18-096e-4770-b59c-4e472a5d4b0e
 :END:
 #+BEGIN_SRC sh
-  $ apk add build-base g++ gcc automake autoconf libpng-dev glib-dev poppler-dev
+  $ apk add build-base gcc automake autoconf libpng-dev glib-dev poppler-dev
 #+END_SRC
 
 *** Installing ~epdfinfo~ Server Prerequisites On Windows
@@ -277,7 +277,6 @@ Package maintained at: https://packages.ubuntu.com/impish/elpa-pdf-tools-server
 This package depends on the following Elisp packages, which should be installed before installing the ~pdf-tools~ package.
 | Package   | Required version                 |
 |-----------+----------------------------------|
-| [[https://elpa.gnu.org/packages/let-alist.html][let-alist]] | >= 1.0.4 (comes with Emacs 25.2) |
 | [[http://melpa.org/#/tablist][tablist]]   | >= 0.70                          |
 |-----------+----------------------------------|
 
@@ -516,6 +515,37 @@ With a recent [[https://www.gnu.org/software/auctex/][AUCTeX]] installation, you
 :END:
 L/R scrolling breaks while zoomed into a pdf, with usage of sublimity smooth scrolling features
 
+** Text selection is not transparent in PDFs OCRed with Tesseract
+:PROPERTIES:
+:CREATED:  [2022-09-19 Mon 18:50]
+:ID:       C3A4A7C0-6BBB-4923-AD39-3707C8482A76
+:END:
+
+In such PDFs the selected text becomes hidden behind the selection; see [[https://github.com/vedang/pdf-tools/issues/149][this issue]], which also describes the workaround in detail. The following function, which depends on the [[https://github.com/orgtre/qpdf.el][qpdf.el]] package, can be used to convert such a PDF file into one where text selection is transparent: 
+#+begin_src elisp
+  (defun my-fix-pdf-selection ()
+    "Replace pdf with one where selection shows transparently."
+    (interactive)
+    (unless (equal (file-name-extension (buffer-file-name)) "pdf")
+      (error "Buffer should visit a pdf file."))
+    (unless (equal major-mode 'pdf-view-mode)
+      (pdf-view-mode))
+    ;; save file in QDF-mode
+    (qpdf-run (list
+               (concat "--infile="
+                       (buffer-file-name))
+               "--qdf --object-streams=disable"
+               "--replace-input"))
+    ;; do replacements
+    (text-mode)
+    (read-only-mode -1)
+    (while (re-search-forward "3 Tr" nil t)
+      (replace-match "7 Tr" nil nil))
+    (save-buffer)
+    (pdf-view-mode))
+#+end_src
+Note that this overwrites the PDF file visited in the buffer from which it is run! To avoid this replace the ~--replace-input~ with ~(concat "--outfile=" (file-truename (read-file-name "Outfile: ")))~.
+
 * Key-bindings in PDF Tools
 :PROPERTIES:
 :CREATED:  [2021-12-29 Wed 18:34]
@@ -542,7 +572,7 @@ L/R scrolling breaks while zoomed into a pdf, with usage of sublimity smooth scr
 #+end_src
 Toggling debug mode prints information about various operations in the ~*Messages*~ buffer, and this is useful to see what is happening behind the scenes
 
-** Run basic tests locally
+** Run Emacs lisp tests locally
 :PROPERTIES:
 :CREATED:  [2022-05-09 Mon 21:27]
 :ID:       1CBE7325-A5A1-479B-9A98-BEEFBAC9D8FF
@@ -550,6 +580,25 @@ Toggling debug mode prints information about various operations in the ~*Message
 You can go to the ~pdf-tools~ folder and run ~make test~ to run the ERT tests and check if the changes you have made to the code break any of the tests.
 
 The tests are written in ERT, which is the built-in testing system in Emacs. However, they are run using ~Cask~ which you will have to install first, if you don't have it already. You can install ~Cask~ by following the instructions on their site at https://github.com/cask/cask
+** Run server compilation tests locally
+:PROPERTIES:
+:CREATED:  [2022-07-20 Wed 16:42]
+:ID:       5327945D-9D92-4462-8172-7237DEF4C359
+:END:
+You can go to the ~pdf-tools~ folder and run ~make server-test~ to check if the changes you have made to the server code break compilation on any of the supported operating systems.
+
+The tests build ~Podman~ images for all supported operating systems, so you will have to install ~Podman~ first, if you don't have already. You can install ~Podman~ by following the instructions on their site at https://podman.io/getting-started/installation
+
+Podman is compatible with Docker, so if you already have ~docker~ installed, you should be able to ~alias podman=docker~ on your shell and run the tests, without having to install Docker. (Note: I have not tested this)
+
+** Add a Dockerfile to automate server compilation testing
+:PROPERTIES:
+:CREATED:  [2022-07-20 Wed 16:52]
+:ID:       A401543C-308B-4175-8212-5B78CD6C8389
+:END:
+The ~server/test/docker~ folder contains Dockerfile templates used for testing that the ~epdfinfo~ server compiles correctly on various operating systems ([[id:5327945D-9D92-4462-8172-7237DEF4C359][more details here]]).
+
+To see the list of operating systems where compilation testing is supported, run ~make server-test-supported~. To see the list of operating systems where testing is unsupported, run ~make server-test-unsupported~. To add support, look into the ~server/test/docker/templates~ folder (~ubuntu~ files are a good example to refer to)
 
 * FAQs
 :PROPERTIES:
@@ -585,12 +634,13 @@ I'm working on automating ~pdf-tools~ installation as much as possible, in order
 1. Add a call to ~os_myfavos~ under ~handle-options~ at the end of the existing call chain. Here we try and pick up the correct Operating System and install the relevant dependencies.
 2. Add handling for the ~--os~ argument in ~os_argument~ for ~myfavos~, so that the appropriate function can be called to install pre-requisites. ~--os~ is the argument that we pass to the script from the command-line to indicate which OS we are on.
 3. Create a ~os_myfavos~ function. This function checks if we are running on MyFavOS. If we are running on MyFavOS, it sets up ~PKGCMD~, ~PKGARGS~ and ~PACKAGES~ variables so that the appropriate package manager can install the dependencies as part of the rest of the ~autobuild~ script.
+4. If you are adding support for your favorite operating system, consider adding automated testing support as well, to help me ensure that ~epdfinfo~ continues to compile correctly. See [[id:A401543C-308B-4175-8212-5B78CD6C8389][Add a Dockerfile to automate server compilation testing]] for more details.
 
 The idea here is to make the ~server/autobuild~ file the single place from which installation can happen on any Operating System. This makes building ~pdf-tools~ dead simple via the ~Makefile~.
 
 This seems like a lot of work, but it is not. If you need a reference, search for ~os_gentoo~ or ~os_debian~ in the ~server/autobuild~ file and see how these are setup and used. The functions are used to install dependencies on Gentoo and Debian respectively, and are simple to copy / change.
 
-When you make your changes, be sure to test them!
+When you make your changes, please be sure to test [[id:1CBE7325-A5A1-479B-9A98-BEEFBAC9D8FF][the elisp changes]] as well as [[id:5327945D-9D92-4462-8172-7237DEF4C359][the server code changes]] as described in the linked articles.
 
 ** I am on a Macbook M1 and ~pdf-tools~ installation fails with a stack-trace
 :PROPERTIES:

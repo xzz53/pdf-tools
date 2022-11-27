@@ -354,7 +354,7 @@ mktempfile()
       filename =  tempnam(NULL, "epdfinfo");
       if (filename)
         {
-          int fd = open(filename, O_CREAT | O_EXCL | O_RDONLY, S_IRWXU);
+          int fd = open(filename, O_CREAT | O_EXCL | O_RDONLY, S_IRUSR | S_IWUSR);
           if (fd > 0)
             close (fd);
           else
@@ -1309,25 +1309,6 @@ annotation_get_by_key (document_t *doc, const gchar *key)
 }
 
 #ifdef HAVE_POPPLER_ANNOT_MARKUP
-void
-annotation_translate_quadrilateral (PopplerPage *page, PopplerQuadrilateral *q, gboolean inverse)
-{
-  PopplerRectangle cbox;
-  gdouble xs, ys;
-
-  poppler_page_get_crop_box (page, &cbox);
-  xs = MIN (cbox.x1, cbox.x2);
-  ys = MIN (cbox.y1, cbox.y2);
-
-  if (inverse)
-    {
-      xs = -xs; ys = -ys;
-    }
-
-  q->p1.x -= xs, q->p2.x -= xs; q->p3.x -= xs; q->p4.x -= xs;
-  q->p1.y -= ys, q->p2.y -= ys; q->p3.y -= ys; q->p4.y -= ys;
-}
-
 static cairo_region_t*
 annotation_markup_get_text_regions (PopplerPage *page, PopplerAnnotTextMarkup *a)
 {
@@ -1343,7 +1324,6 @@ annotation_markup_get_text_regions (PopplerPage *page, PopplerAnnotTextMarkup *a
       PopplerQuadrilateral *q = &g_array_index (quads, PopplerQuadrilateral, i);
       cairo_rectangle_int_t r;
 
-      annotation_translate_quadrilateral (page, q, FALSE);
       q->p1.y = height - q->p1.y;
       q->p2.y = height - q->p2.y;
       q->p3.y = height - q->p3.y;
@@ -1398,7 +1378,6 @@ annotation_markup_append_text_region (PopplerPage *page, PopplerRectangle *regio
       q.p3.x = r->x1;
       q.p3.y = height - r->y2;
 
-      annotation_translate_quadrilateral (page, &q, TRUE);
       g_array_append_val (garray, q);
     }
   g_list_free (regions);
@@ -1567,6 +1546,7 @@ annotation_print (const annotation_t *annot, /* const */ PopplerPage *page)
   gchar *text;
   gdouble opacity;
   cairo_region_t *region = NULL;
+  GDate *date;
 
   if (! annot || ! page)
     return;
@@ -1668,11 +1648,13 @@ annotation_print (const annotation_t *annot, /* const */ PopplerPage *page)
     printf ("::");
 
   /* Creation Date */
-  text = xpoppler_annot_markup_get_created (ma);
-  if (text)
+  date = poppler_annot_markup_get_date (ma);
+  if (date != NULL && g_date_valid(date))
     {
-      print_response_string (text, NONE);
-      g_free (text);
+      gchar datebuf[128];
+      g_date_strftime (datebuf, 127, "%x", date);
+      print_response_string (datebuf, NONE);
+      g_date_free (date);
     }
 
   /* <<< Markup Annotation <<< */
@@ -2848,7 +2830,7 @@ cmd_editannot (const epdfinfo_t *ctx, const command_arg_t *args)
           area->x1 = r.x1 * width;
           area->y2 = height - (r.y1 * height);
 
-          xpoppler_annot_set_rectangle (pa, area);
+          poppler_annot_set_rectangle (pa, area);
         }
       else if (! strcmp (key, "label"))
         {
