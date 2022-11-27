@@ -58,6 +58,8 @@ continuous scrolling."
          (add-hook 'image-mode-new-window-functions 'image-roll-new-window-function nil t)
 
          (add-hook 'image-roll-after-change-page-hook 'pdf-history-before-change-page-hook nil t)
+         (when (fboundp 'doom-modeline-update-pdf-pages)
+           (add-hook 'image-roll-after-change-page-hook #'doom-modeline-update-pdf-pages nil t))
 
          (let ((inhibit-read-only t))
            (erase-buffer)
